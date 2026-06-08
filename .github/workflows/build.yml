@@ -1,4 +1,3 @@
-
 name: Build Release Signed APK
 
 on:
@@ -18,45 +17,51 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       
-      - name: Setup Build Tools & Apksigner
-        run: sudo apt-get update && sudo apt-get install -y apksigner zipalign
-        
       - name: Install Cordova
         run: npm install -g cordova
         
-      - name: Build & Sign APK
+      - name: Build & Sign APK Securely
         run: |
           export CI=true
           
+          # Amankan aset web
           mkdir -p source_files
-          mv config.xml source_files/
-          mv www source_files/
+          if [ -f "config.xml" ]; then mv config.xml source_files/; fi
+          if [ -d "www" ]; then mv www source_files/; fi
           if [ -d "res" ]; then mv res source_files/; fi
           
-          cordova create app "https://blockvanz.vercel.app" "Block_Blast"
+          # Membuat project Cordova baru
+          cordova create app "com.vanz.blockblast" "Block_Blast"
           cd app
           
+          # Memindahkan file game kamu ke dalam sistem rakit
           rm -rf www/*
-          cp -r ../source_files/www/* www/
-          cp ../source_files/config.xml .
+          if [ -d "../source_files/www" ]; then cp -r ../source_files/www/* www/; fi
+          if [ -f "../source_files/config.xml" ]; then cp ../source_files/config.xml .; fi
           if [ -d "../source_files/res" ]; then cp -r ../source_files/res .; fi
           
+          # Menambahkan platform Android rilis stabil terbaru
           cordova platform add android@13.0.0
           
+          # Mempersiapkan requirements folder agar tidak crash
+          mkdir -p platforms/android/app/src/main/assets/www
+          
+          # Kompilasi aplikasi menjadi APK
           cordova build android --release -- --packageType=apk
           
+          # Membuat kunci keamanan (Keystore) otomatis
           keytool -genkey -v -keystore release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=Block_Blast,O=Developer,C=ID"
           
+          # Mencari file mentah hasil ritan
           APK_FILE=$(find platforms/android/app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
-          
           if [ -z "$APK_FILE" ]; then
              APK_FILE=$(find . -name "*.apk" | head -n 1)
           fi
           
-          echo "Ditemukan APK: $APK_FILE"
-          
+          echo "Menyelaraskan struktur APK..."
           zipalign -v -p 4 "$APK_FILE" aligned.apk
           
+          # Memberikan tanda tangan rilis resmi (Signed)
           apksigner sign --ks release.keystore --ks-pass pass:password123 --out ../Block_Blast-Signed.apk aligned.apk
           
       - name: Upload Final Signed Artifact
